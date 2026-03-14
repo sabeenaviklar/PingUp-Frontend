@@ -1,24 +1,31 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getSocket, disconnectSocket } from './socket';
-import Login    from './components/Login';
-import Sidebar  from './components/Sidebar';
-import MessageList  from './components/MessageList';
-import MessageInput from './components/MessageInput';
-import UserPanel    from './components/UserPanel';
+import Login         from './components/Login';
+import DMSidebar     from './components/DMSidebar';
+import FriendsPanel  from './components/FriendsPanel';
+import ProfileModal  from './components/ProfileModal';
+import MessageList   from './components/MessageList';
+import MessageInput  from './components/MessageInput';
+import UserPanel     from './components/UserPanel';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     const u = localStorage.getItem('user');
     return u ? JSON.parse(u) : null;
   });
-  const [token, setToken]           = useState(() => localStorage.getItem('token') || '');
-  const [rooms, setRooms]           = useState([]);
-  const [activeRoom, setActiveRoom] = useState(null);
-  const [messages, setMessages]     = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [token, setToken] = useState(() => localStorage.getItem('token') || '');
+
+  const [rooms, setRooms]                     = useState([]);
+  const [activeRoom, setActiveRoom]           = useState(null);
+  const [messages, setMessages]               = useState([]);
+  const [notifications, setNotifications]     = useState([]);
   const [commandResponses, setCommandResponses] = useState([]);
-  const [typingUsers, setTypingUsers]   = useState([]);
-  const [onlineUsers, setOnlineUsers]   = useState([]);
+  const [typingUsers, setTypingUsers]         = useState([]);
+  const [onlineUsers, setOnlineUsers]         = useState([]);
+
+  const [showProfile, setShowProfile]         = useState(false);  // ← My Account modal
+  const [showFriends, setShowFriends]         = useState(false);  // ← Friends panel
+
   const socketRef = useRef(null);
 
   // ── Load rooms ──
@@ -27,16 +34,17 @@ export default function App() {
       .then(r => r.json()).then(setRooms).catch(() => {});
   }, []);
 
-  // ── Init socket ──
+  // ── Socket ──
   useEffect(() => {
     if (!token || !currentUser) return;
     const socket = getSocket(token);
     socketRef.current = socket;
     socket.connect();
 
-    socket.on('users:update',  setOnlineUsers);
-    socket.on('rooms:update',  setRooms);
-    socket.on('role:updated',  ({ role }) => {
+    socket.on('users:update', setOnlineUsers);
+    socket.on('rooms:update', setRooms);
+
+    socket.on('role:updated', ({ role }) => {
       setCurrentUser(u => {
         const updated = { ...u, role };
         localStorage.setItem('user', JSON.stringify(updated));
@@ -50,53 +58,33 @@ export default function App() {
       setCommandResponses([]);
     });
 
-    socket.on('message:new', msg => {
-      setMessages(prev => [...prev, msg]);
-    });
-
+    socket.on('message:new',     msg => setMessages(prev => [...prev, msg]));
     socket.on('message:deleted', ({ id }) => {
-      setMessages(prev => prev.map(m =>
-        m.id === id ? { ...m, deleted: true, text: '[message deleted]' } : m
-      ));
+      setMessages(prev =>
+        prev.map(m => m.id === id ? { ...m, deleted: true, text: '[message deleted]' } : m)
+      );
     });
-
-    socket.on('room:cleared', () => setMessages([]));
-
-    socket.on('room:notification', ({ text }) => {
-      setNotifications(prev => [...prev, text]);
-    });
-
-    socket.on('command:response', res => {
-      setCommandResponses(prev => [...prev, res]);
-    });
-
-    socket.on('typing:update', ({ username, typing }) => {
+    socket.on('room:cleared',        () => setMessages([]));
+    socket.on('room:notification',   ({ text }) => setNotifications(prev => [...prev, text]));
+    socket.on('command:response',    res  => setCommandResponses(prev => [...prev, res]));
+    socket.on('typing:update',       ({ username, typing }) => {
       setTypingUsers(prev =>
         typing ? [...new Set([...prev, username])] : prev.filter(u => u !== username)
       );
     });
-
     socket.on('kicked', ({ by }) => {
       alert(`You were kicked by ${by}.`);
       handleLogout();
     });
-
     socket.on('error:permission', msg => alert(`⛔ ${msg}`));
     socket.on('error:general',    msg => console.error(msg));
 
-    return () => {
-      socket.off('users:update'); socket.off('rooms:update');
-      socket.off('room:history'); socket.off('message:new');
-      socket.off('message:deleted'); socket.off('room:cleared');
-      socket.off('room:notification'); socket.off('command:response');
-      socket.off('typing:update'); socket.off('kicked');
-      socket.off('error:permission'); socket.off('error:general');
-      socket.off('role:updated');
-    };
+    return () => { socket.removeAllListeners(); };
   }, [token, currentUser?.id]);
 
   const handleRoomSelect = useCallback((room) => {
     setActiveRoom(room);
+    setShowFriends(false);
     setTypingUsers([]);
     socketRef.current?.emit('room:join', { roomName: room.name });
   }, []);
@@ -117,29 +105,44 @@ export default function App() {
   }, [activeRoom]);
 
   const handleLogin = (user, tok) => {
-    setCurrentUser(user); setToken(tok);
+    setCurrentUser(user);
+    setToken(tok);
   };
 
   const handleLogout = () => {
     disconnectSocket();
-    localStorage.removeItem('token'); localStorage.removeItem('user');
-    setCurrentUser(null); setToken(''); setActiveRoom(null); setMessages([]);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setCurrentUser(null);
+    setToken('');
+    setActiveRoom(null);
+    setMessages([]);
+    setShowProfile(false);
   };
 
+  // ── Not logged in ──
   if (!currentUser) return <Login onLogin={handleLogin} />;
 
   return (
     <div className="app-layout">
-      <Sidebar
-        rooms={rooms}
-        activeRoom={activeRoom}
-        onRoomSelect={handleRoomSelect}
+
+      {/* ── DM Sidebar with bottom user bar ── */}
+      <DMSidebar
         currentUser={currentUser}
+        onlineUsers={onlineUsers}
+        activeRoom={activeRoom}
+        rooms={rooms}
+        onRoomSelect={handleRoomSelect}
         onLogout={handleLogout}
+        onOpenProfile={() => setShowProfile(true)}   
+        onShowFriends={() => { setShowFriends(true); setActiveRoom(null); }}
       />
 
+      {/* ── Main chat area ── */}
       <div className="chat-area">
-        {activeRoom ? (
+        {showFriends ? (
+          <FriendsPanel onlineUsers={onlineUsers} />
+        ) : activeRoom ? (
           <>
             <div className="chat-header">
               <span className="chat-header-hash">#</span>
@@ -165,12 +168,24 @@ export default function App() {
           <div className="no-room-placeholder">
             <h2>Welcome, {currentUser.username}</h2>
             <p>Select a channel from the sidebar to start messaging.</p>
-            <p style={{ fontSize: '.78rem' }}>Tip: type <code>/help</code> after joining a room</p>
+            <p style={{ fontSize: '.78rem', marginTop: 8 }}>
+              Tip: type <code>/help</code> after joining a room
+            </p>
           </div>
         )}
       </div>
 
+      {/* ── Online users panel (right) ── */}
       <UserPanel users={onlineUsers} />
+
+      {/* ── My Account modal ── */}
+      {showProfile && (
+        <ProfileModal
+          user={currentUser}
+          onClose={() => setShowProfile(false)}
+          onLogout={handleLogout}
+        />
+      )}
     </div>
   );
 }
