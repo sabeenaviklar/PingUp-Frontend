@@ -439,3 +439,8 @@ deployed link:
 https://pingup-frontendss.onrender.com
 
 https://pingup-backend-1.onrender.com
+
+video link:
+
+https://www.canva.com/design/DAHEASllkWg/ZScJo14Mzi1qm_jlFb_4sA/edit?utm_content=DAHEASllkWg&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+
