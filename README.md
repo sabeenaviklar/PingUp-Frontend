@@ -110,5 +110,6 @@ Type `/help` in any channel to see all commands:
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/verdant-chat.git
+git clone https://github.com/sabeenaviklar/PingUp-Frontend.git
 cd verdant-chat
+
