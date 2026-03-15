@@ -5,7 +5,7 @@ export default function DMList({ currentUser, token, onlineUsers, onOpenDM, acti
 
   useEffect(() => {
     if (!token) return;
-    fetch('https://pingup-backend-1.onrender.com/api/dm', {
+    fetch('http://localhost:3001/api/dm', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -16,7 +16,7 @@ export default function DMList({ currentUser, token, onlineUsers, onOpenDM, acti
   // Refresh list when a new DM notification arrives
   useEffect(() => {
     if (!dmNotifications.length || !token) return;
-    fetch('https://pingup-backend-1.onrender.com/api/dm', {
+    fetch('http://localhost:3001/api/dm', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
