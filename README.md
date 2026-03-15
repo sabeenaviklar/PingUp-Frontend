@@ -261,8 +261,8 @@ Create a `.env` file in the `PingUp-Frontend/` folder:
 ```bash
 # PingUp-Frontend/.env
 
-VITE_API_URL=http://localhost:3001
-VITE_SOCKET_URL=http://localhost:3001
+VITE_API_URL=https://pingup-backend-1.onrender.com
+VITE_SOCKET_URL=https://pingup-backend-1.onrender.com
 ```
 
 Start the frontend:

@@ -12,7 +12,7 @@ export default function AdminPanel({ currentUser, socket, categories, onlineUser
   useEffect(() => {
     if (tab !== 'users' && tab !== 'roles') return;
     setLoadingUsers(true);
-    fetch('http://localhost:3001/api/users', {
+    fetch('https://pingup-backend-1.onrender.com/api/users', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
