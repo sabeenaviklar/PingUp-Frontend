@@ -434,3 +434,8 @@ Feel free to fork, modify, and build upon it.
   <a href="https://github.com/sabeenaviklar/PingUp-Frontend">Frontend</a> ·
   <a href="https://github.com/sabeenaviklar/PingUp-Backend">Backend</a>
 </p>
+
+deployed link:
+https://pingup-frontendss.onrender.com
+
+https://pingup-backend-1.onrender.com
