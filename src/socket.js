@@ -4,7 +4,7 @@ let socket = null;
 
 export function getSocket(token) {
   if (!socket) {
-    socket = io('http://localhost:3001', {
+    socket = io('https://pingup-backend-1.onrender.com', {
       auth: { token },
       autoConnect: false,
     });
