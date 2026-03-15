@@ -436,7 +436,10 @@ Feel free to fork, modify, and build upon it.
 </p>
 
 deployed link:
-https://pingup-frontendss.onrender.com
+https://pingupsite.onrender.com
+
+
+backend-
 
 https://pingup-backend-1.onrender.com
 
