@@ -1,50 +1,58 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getSocket, disconnectSocket } from './socket';
+
 import Login         from './components/Login';
+import Register      from './components/Register';
 import DMSidebar     from './components/DMSidebar';
 import FriendsPanel  from './components/FriendsPanel';
 import ProfileModal  from './components/ProfileModal';
 import MessageList   from './components/MessageList';
 import MessageInput  from './components/MessageInput';
 import UserPanel     from './components/UserPanel';
-import DMChat  from './components/DMChat';
-import DMList  from './components/DMList';
-
+import DMChat        from './components/DMChat';
+import DMList        from './components/DMList';
 
 export default function App() {
+  // ── Auth ──────────────────────────────────────────────────────────
+  const [authPage, setAuthPage] = useState('login'); // 'login' | 'register'
+
   const [currentUser, setCurrentUser] = useState(() => {
     const u = localStorage.getItem('user');
     return u ? JSON.parse(u) : null;
   });
   const [token, setToken] = useState(() => localStorage.getItem('token') || '');
 
-  const [rooms, setRooms]                     = useState([]);
-  const [activeRoom, setActiveRoom]           = useState(null);
-  const [messages, setMessages]               = useState([]);
-  const [notifications, setNotifications]     = useState([]);
+  // ── App State ─────────────────────────────────────────────────────
+  const [rooms,            setRooms]            = useState([]);
+  const [activeRoom,       setActiveRoom]       = useState(null);
+  const [messages,         setMessages]         = useState([]);
+  const [notifications,    setNotifications]    = useState([]);
   const [commandResponses, setCommandResponses] = useState([]);
-  const [typingUsers, setTypingUsers]         = useState([]);
-  const [onlineUsers, setOnlineUsers]         = useState([]);
+  const [typingUsers,      setTypingUsers]      = useState([]);
+  const [onlineUsers,      setOnlineUsers]      = useState([]);
 
-  const [showProfile, setShowProfile]         = useState(false);  // ← My Account modal
-  const [showFriends, setShowFriends]         = useState(false);  // ← Friends panel
+  const [showProfile, setShowProfile] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
 
-  const [activeDM, setActiveDM]           = useState(null); // { id, username, role, online }
-const [dmNotifications, setDmNotifications] = useState([]);
-const [dmToast, setDmToast]             = useState(null);
-
+  const [activeDM,         setActiveDM]         = useState(null);
+  const [dmNotifications,  setDmNotifications]  = useState([]);
+  const [dmToast,          setDmToast]          = useState(null);
 
   const socketRef = useRef(null);
 
-  // ── Load rooms ──
+  // ── Load rooms ────────────────────────────────────────────────────
   useEffect(() => {
-    fetch('http://localhost:3001/api/rooms')
+    if (!token) return;
+    fetch('http://localhost:3001/api/rooms', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then(r => r.json()).then(setRooms).catch(() => {});
-  }, []);
+  }, [token]);
 
-  // ── Socket ──
+  // ── Socket ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token || !currentUser) return;
+
     const socket = getSocket(token);
     socketRef.current = socket;
     socket.connect();
@@ -66,28 +74,28 @@ const [dmToast, setDmToast]             = useState(null);
       setCommandResponses([]);
     });
 
-    // DM notification when a message arrives and you're not in the conversation
-socket.on('dm:notification', (notif) => {
-  setDmNotifications(prev => [...prev, notif]);
-  setDmToast(notif);
-  setTimeout(() => setDmToast(null), 4000); // auto-dismiss after 4s
-});
+    socket.on('dm:notification', (notif) => {
+      setDmNotifications(prev => [...prev, notif]);
+      setDmToast(notif);
+      setTimeout(() => setDmToast(null), 4000);
+    });
 
-
-    socket.on('message:new',     msg => setMessages(prev => [...prev, msg]));
-    socket.on('message:deleted', ({ id }) => {
+    socket.on('message:new', msg =>
+      setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg])
+    );
+    socket.on('message:deleted', ({ id }) =>
       setMessages(prev =>
         prev.map(m => m.id === id ? { ...m, deleted: true, text: '[message deleted]' } : m)
-      );
-    });
-    socket.on('room:cleared',        () => setMessages([]));
-    socket.on('room:notification',   ({ text }) => setNotifications(prev => [...prev, text]));
-    socket.on('command:response',    res  => setCommandResponses(prev => [...prev, res]));
-    socket.on('typing:update',       ({ username, typing }) => {
+      )
+    );
+    socket.on('room:cleared',      ()           => setMessages([]));
+    socket.on('room:notification', ({ text })   => setNotifications(prev => [...prev, text]));
+    socket.on('command:response',  res          => setCommandResponses(prev => [...prev, res]));
+    socket.on('typing:update',     ({ username, typing }) =>
       setTypingUsers(prev =>
         typing ? [...new Set([...prev, username])] : prev.filter(u => u !== username)
-      );
-    });
+      )
+    );
     socket.on('kicked', ({ by }) => {
       alert(`You were kicked by ${by}.`);
       handleLogout();
@@ -98,8 +106,33 @@ socket.on('dm:notification', (notif) => {
     return () => { socket.removeAllListeners(); };
   }, [token, currentUser?.id]);
 
+  // ── Handlers ──────────────────────────────────────────────────────
+  const handleLogin = (user, tok) => {
+    setCurrentUser(user);
+    setToken(tok);
+    localStorage.setItem('token', tok);
+    localStorage.setItem('user',  JSON.stringify(user));
+    setAuthPage('login'); // reset for next logout
+  };
+
+  const handleLogout = () => {
+    disconnectSocket();
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setCurrentUser(null);
+    setToken('');
+    setActiveRoom(null);
+    setActiveDM(null);
+    setMessages([]);
+    setOnlineUsers([]);
+    setShowProfile(false);
+    setShowFriends(false);
+    setAuthPage('login');
+  };
+
   const handleRoomSelect = useCallback((room) => {
     setActiveRoom(room);
+    setActiveDM(null);
     setShowFriends(false);
     setTypingUsers([]);
     socketRef.current?.emit('room:join', { roomName: room.name });
@@ -120,27 +153,36 @@ socket.on('dm:notification', (notif) => {
     socketRef.current?.emit('typing:stop', { roomName: activeRoom.name });
   }, [activeRoom]);
 
-  const handleLogin = (user, tok) => {
-    setCurrentUser(user);
-    setToken(tok);
-  };
-
-  const handleLogout = () => {
-    disconnectSocket();
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setCurrentUser(null);
-    setToken('');
+  function openDM(user) {
+    setActiveDM(user);
     setActiveRoom(null);
-    setMessages([]);
-    setShowProfile(false);
-  };
+    setShowFriends(false);
+    socketRef.current?.emit('dm:join', { otherUserId: user.id });
+    setDmNotifications(prev => prev.filter(n => n.fromId !== user.id));
+  }
 
-  // ── Not logged in ──
-  if (!currentUser) return <Login onLogin={handleLogin} />;
+  // ── Not logged in → show auth pages ───────────────────────────────
+  if (!currentUser) {
+    if (authPage === 'register') {
+      return (
+        <Register
+          onLogin={handleLogin}
+          onSwitch={() => setAuthPage('login')}
+        />
+      );
+    }
+    return (
+      <Login
+        onLogin={handleLogin}
+        onSwitch={() => setAuthPage('register')}
+      />
+    );
+  }
 
+  // ── Main App ──────────────────────────────────────────────────────
   return (
     <div className="app-layout">
+
       <DMSidebar
         currentUser={currentUser}
         onlineUsers={onlineUsers}
@@ -149,29 +191,26 @@ socket.on('dm:notification', (notif) => {
         onRoomSelect={handleRoomSelect}
         onLogout={handleLogout}
         onOpenProfile={() => setShowProfile(true)}
-        onShowFriends={() => { setShowFriends(true); setActiveRoom(null); setActiveDM(null); }}
+        onShowFriends={() => {
+          setShowFriends(true);
+          setActiveRoom(null);
+          setActiveDM(null);
+        }}
       />
-  
-      {/* DM List (between sidebar and chat) */}
+
+      {/* DM List — visible when not in a room or friends panel */}
       {!activeRoom && !showFriends && (
         <DMList
           currentUser={currentUser}
           token={token}
           onlineUsers={onlineUsers}
-          onOpenDM={(user) => {
-            setActiveDM(user);
-            setActiveRoom(null);
-            setShowFriends(false);
-            socketRef.current?.emit('dm:join', { otherUserId: user.id });
-            // Clear notifications from this user
-            setDmNotifications(prev => prev.filter(n => n.fromId !== user.id));
-          }}
+          onOpenDM={openDM}
           activeDMId={activeDM?.id}
           dmNotifications={dmNotifications}
         />
       )}
-  
-      {/* Main area */}
+
+      {/* Main content */}
       <div className="chat-area">
         {activeDM ? (
           <DMChat
@@ -184,8 +223,10 @@ socket.on('dm:notification', (notif) => {
             socket={socketRef.current}
             onClose={() => setActiveDM(null)}
           />
+
         ) : showFriends ? (
           <FriendsPanel onlineUsers={onlineUsers} />
+
         ) : activeRoom ? (
           <>
             <div className="chat-header">
@@ -208,47 +249,53 @@ socket.on('dm:notification', (notif) => {
               roomName={activeRoom.name}
             />
           </>
+
         ) : (
           <div className="no-room-placeholder">
             <h2>Welcome, {currentUser.username} 👋</h2>
-            <p>Select a channel or click a user to DM them.</p>
+            <p>Select a channel from the sidebar or click a user to DM.</p>
           </div>
         )}
       </div>
-  
+
+      {/* Right panel */}
       <UserPanel
         users={onlineUsers}
         onUserClick={(user) => {
           if (user.id === currentUser.id) return;
-          setActiveDM(user);
-          setActiveRoom(null);
-          setShowFriends(false);
-          socketRef.current?.emit('dm:join', { otherUserId: user.id });
-          setDmNotifications(prev => prev.filter(n => n.fromId !== user.id));
+          openDM(user);
         }}
       />
-  
+
+      {/* Profile modal */}
       {showProfile && (
-        <ProfileModal user={currentUser} onClose={() => setShowProfile(false)} onLogout={handleLogout} />
+        <ProfileModal
+          user={currentUser}
+          onClose={() => setShowProfile(false)}
+          onLogout={handleLogout}
+        />
       )}
-  
-      {/* Toast notification */}
+
+      {/* DM Toast notification */}
       {dmToast && (
         <div className="dm-toast" onClick={() => {
-          setActiveDM({ id: dmToast.fromId, username: dmToast.from, role: 'member', online: true });
-          setActiveRoom(null);
+          openDM({ id: dmToast.fromId, username: dmToast.from, role: 'member', online: true });
           setDmToast(null);
-          setDmNotifications(prev => prev.filter(n => n.fromId !== dmToast.fromId));
         }}>
-          <div className="dm-toast-avatar">{dmToast.from[0].toUpperCase()}</div>
+          <div className="dm-toast-avatar">
+            {dmToast.from?.[0]?.toUpperCase()}
+          </div>
           <div className="dm-toast-body">
             <div className="dm-toast-from">{dmToast.from}</div>
             <div className="dm-toast-preview">{dmToast.preview}</div>
           </div>
-          <button className="dm-toast-close" onClick={e => { e.stopPropagation(); setDmToast(null); }}>✕</button>
+          <button
+            className="dm-toast-close"
+            onClick={e => { e.stopPropagation(); setDmToast(null); }}
+          >✕</button>
         </div>
       )}
+
     </div>
   );
 }
-

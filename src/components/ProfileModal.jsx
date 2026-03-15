@@ -8,7 +8,7 @@ export default function ProfileModal({ user, onClose }) {
   const [fields, setFields] = useState({
     displayName: user.username,
     username:    user.username,
-    email:       'user@example.com',
+    email:       'user@gmail.com',
     phone:       '1234565862',
   });
   const [tempVal, setTempVal] = useState('');
