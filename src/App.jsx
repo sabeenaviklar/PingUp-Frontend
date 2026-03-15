@@ -7,6 +7,9 @@ import ProfileModal  from './components/ProfileModal';
 import MessageList   from './components/MessageList';
 import MessageInput  from './components/MessageInput';
 import UserPanel     from './components/UserPanel';
+import DMChat  from './components/DMChat';
+import DMList  from './components/DMList';
+
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -25,6 +28,11 @@ export default function App() {
 
   const [showProfile, setShowProfile]         = useState(false);  // ← My Account modal
   const [showFriends, setShowFriends]         = useState(false);  // ← Friends panel
+
+  const [activeDM, setActiveDM]           = useState(null); // { id, username, role, online }
+const [dmNotifications, setDmNotifications] = useState([]);
+const [dmToast, setDmToast]             = useState(null);
+
 
   const socketRef = useRef(null);
 
@@ -57,6 +65,14 @@ export default function App() {
       setNotifications([]);
       setCommandResponses([]);
     });
+
+    // DM notification when a message arrives and you're not in the conversation
+socket.on('dm:notification', (notif) => {
+  setDmNotifications(prev => [...prev, notif]);
+  setDmToast(notif);
+  setTimeout(() => setDmToast(null), 4000); // auto-dismiss after 4s
+});
+
 
     socket.on('message:new',     msg => setMessages(prev => [...prev, msg]));
     socket.on('message:deleted', ({ id }) => {
@@ -125,8 +141,6 @@ export default function App() {
 
   return (
     <div className="app-layout">
-
-      {/* ── DM Sidebar with bottom user bar ── */}
       <DMSidebar
         currentUser={currentUser}
         onlineUsers={onlineUsers}
@@ -134,13 +148,43 @@ export default function App() {
         rooms={rooms}
         onRoomSelect={handleRoomSelect}
         onLogout={handleLogout}
-        onOpenProfile={() => setShowProfile(true)}   
-        onShowFriends={() => { setShowFriends(true); setActiveRoom(null); }}
+        onOpenProfile={() => setShowProfile(true)}
+        onShowFriends={() => { setShowFriends(true); setActiveRoom(null); setActiveDM(null); }}
       />
-
-      {/* ── Main chat area ── */}
+  
+      {/* DM List (between sidebar and chat) */}
+      {!activeRoom && !showFriends && (
+        <DMList
+          currentUser={currentUser}
+          token={token}
+          onlineUsers={onlineUsers}
+          onOpenDM={(user) => {
+            setActiveDM(user);
+            setActiveRoom(null);
+            setShowFriends(false);
+            socketRef.current?.emit('dm:join', { otherUserId: user.id });
+            // Clear notifications from this user
+            setDmNotifications(prev => prev.filter(n => n.fromId !== user.id));
+          }}
+          activeDMId={activeDM?.id}
+          dmNotifications={dmNotifications}
+        />
+      )}
+  
+      {/* Main area */}
       <div className="chat-area">
-        {showFriends ? (
+        {activeDM ? (
+          <DMChat
+            currentUser={currentUser}
+            otherUser={{
+              ...activeDM,
+              online: !!onlineUsers.find(u => u.id === activeDM.id),
+            }}
+            token={token}
+            socket={socketRef.current}
+            onClose={() => setActiveDM(null)}
+          />
+        ) : showFriends ? (
           <FriendsPanel onlineUsers={onlineUsers} />
         ) : activeRoom ? (
           <>
@@ -166,26 +210,45 @@ export default function App() {
           </>
         ) : (
           <div className="no-room-placeholder">
-            <h2>Welcome, {currentUser.username}</h2>
-            <p>Select a channel from the sidebar to start messaging.</p>
-            <p style={{ fontSize: '.78rem', marginTop: 8 }}>
-              Tip: type <code>/help</code> after joining a room
-            </p>
+            <h2>Welcome, {currentUser.username} 👋</h2>
+            <p>Select a channel or click a user to DM them.</p>
           </div>
         )}
       </div>
-
-      {/* ── Online users panel (right) ── */}
-      <UserPanel users={onlineUsers} />
-
-      {/* ── My Account modal ── */}
+  
+      <UserPanel
+        users={onlineUsers}
+        onUserClick={(user) => {
+          if (user.id === currentUser.id) return;
+          setActiveDM(user);
+          setActiveRoom(null);
+          setShowFriends(false);
+          socketRef.current?.emit('dm:join', { otherUserId: user.id });
+          setDmNotifications(prev => prev.filter(n => n.fromId !== user.id));
+        }}
+      />
+  
       {showProfile && (
-        <ProfileModal
-          user={currentUser}
-          onClose={() => setShowProfile(false)}
-          onLogout={handleLogout}
-        />
+        <ProfileModal user={currentUser} onClose={() => setShowProfile(false)} onLogout={handleLogout} />
+      )}
+  
+      {/* Toast notification */}
+      {dmToast && (
+        <div className="dm-toast" onClick={() => {
+          setActiveDM({ id: dmToast.fromId, username: dmToast.from, role: 'member', online: true });
+          setActiveRoom(null);
+          setDmToast(null);
+          setDmNotifications(prev => prev.filter(n => n.fromId !== dmToast.fromId));
+        }}>
+          <div className="dm-toast-avatar">{dmToast.from[0].toUpperCase()}</div>
+          <div className="dm-toast-body">
+            <div className="dm-toast-from">{dmToast.from}</div>
+            <div className="dm-toast-preview">{dmToast.preview}</div>
+          </div>
+          <button className="dm-toast-close" onClick={e => { e.stopPropagation(); setDmToast(null); }}>✕</button>
+        </div>
       )}
     </div>
   );
 }
+
