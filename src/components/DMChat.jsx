@@ -12,7 +12,7 @@ export default function DMChat({ currentUser, otherUser, token, socket, onClose 
   useEffect(() => {
     if (!otherUser || !token) return;
 
-    fetch(`http://localhost:3001/api/dm/${otherUser.id}`, {
+    fetch(`https://pingup-backend-1.onrender.com/${otherUser.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
